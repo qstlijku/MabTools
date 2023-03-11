@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "FCBConverter": {
+      "commandName": "Project",
+      "commandLineArgs": "\"2728749518.bnk.converted.xml\""
+    }
+  }
+}
