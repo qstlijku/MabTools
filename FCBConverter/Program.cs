@@ -1380,7 +1380,7 @@ namespace FCBConverter
             */
 
             // start of array 9
-            int numAnchors = 100;
+            int numAnchors = Int32.MaxValue;
             MabStream.Seek(100, SeekOrigin.Begin);
             uint pos9 = MabStream.ReadValueU32();
             Console.WriteLine("Position of array 9: " + pos9);
