@@ -1383,7 +1383,7 @@ namespace FCBConverter
             int numAnchors = Int32.MaxValue;
             MabStream.Seek(100, SeekOrigin.Begin);
             uint pos9 = MabStream.ReadValueU32();
-            Console.WriteLine("Position of array 9: " + pos9);
+            Console.WriteLine("Position of array 9: " + pos9.ToString("X"));
             List<uint> bones = new List<uint>();
             for (int i = 0; i < 2; i++)
             {
@@ -1649,50 +1649,47 @@ namespace FCBConverter
             */
 
             // start of array 9
-            int numAnchors = 100;
             MabStream.Seek(100, SeekOrigin.Begin);
             uint pos9 = MabStream.ReadValueU32();
-            Console.WriteLine("Position of array 9: " + pos9);
+            Console.WriteLine("Position of array 9: " + pos9.ToString("X"));
             List<uint> bones = new List<uint>();
-            for (int i = 0; i < 2; i++)
+            // i = 0: Exploration loop
+            // first time around, count the number of anchors
+            // Need to figure out why I have bad data on first pass
+            // Second time, actually read the data
+            if (pos9 == 0)
             {
-                if (pos9 == 0)
-                {
-                    // Array 9 does not exist, do nothing
-                    MabStream.Seek(firstPos, SeekOrigin.Begin);
-                    break;
-                }
+                // Array 9 does not exist, do nothing
+                MabStream.Seek(firstPos, SeekOrigin.Begin);
+            }
+            else
+            {
                 MabStream.Seek(pos9, SeekOrigin.Begin);
-                MabStream.Seek(24, SeekOrigin.Current); // offset of first anchor
+                MabStream.Seek(16, SeekOrigin.Current); // offset of first anchor
                 int anchor = 1;
+                Console.WriteLine("First anchor:");
+                uint numAnchors = MabStream.ReadValueU32();
+                uint zero = MabStream.ReadValueU32();
+                uint sectionSize = MabStream.ReadValueU32();
+                Console.WriteLine("anchorCount: " + numAnchors);
+                Console.WriteLine("sectionSize: " + sectionSize);
+                uint offset = (uint)(4 * (numAnchors - anchor));
+                offset += 4;
+                output.WriteValueU32((uint)(sectionSize - offset));
+                zero = MabStream.ReadValueU32();
                 while (anchor <= numAnchors)
                 {
-                    uint zero = 0;
-                    if (anchor == 1)
-                    {
-                        uint sectionSize = MabStream.ReadValueU32();
-                        Console.WriteLine("sectionSize: " + sectionSize);
-                        if (i == 1)
-                        {
-                            uint offset = (uint)(4 * (numAnchors - anchor));
-                            if (anchor == 1)
-                            {
-                                offset += 4;
-                            }
-                            output.WriteValueU32((uint)(sectionSize - offset));
-                        }
-                        zero = MabStream.ReadValueU32();
-                    }
                     uint signature = MabStream.ReadValueU32();
                     uint childBone = MabStream.ReadValueU32();
                     uint parentBone = MabStream.ReadValueU32();
                     uint targetBone = MabStream.ReadValueU32();
                     byte anchorType = MabStream.ReadValueU8();
-                    byte blank = MabStream.ReadValueU8();
+                    byte blank = MabStream.ReadValueU8(); // Should be 3
                     ushort nameStart = MabStream.ReadValueU16();
                     // Added 4 hex bytes of padding (00) here
                     if (anchor < numAnchors)
                     {
+                        Console.WriteLine("Added padding with anchor: " + anchor);
                         zero = MabStream.ReadValueU32();
                     }
                     uint subsectionEnd = MabStream.ReadValueU32();
@@ -1700,46 +1697,51 @@ namespace FCBConverter
                     if (maybeZero != 0)
                     {
                         Console.WriteLine("Reached last anchor");
-                        numAnchors = anchor;
+                        Console.WriteLine("Last anchor subsection end: " + subsectionEnd.ToString("X"));
+                        Console.WriteLine("Maybe zero NOT 0 for last anchor: " + maybeZero.ToString("X"));
+                        //numAnchors = anchor;
                     }
-                    Console.WriteLine("signature: " + signature);
-                    Console.WriteLine(zero);
-                    Console.WriteLine(childBone);
-                    Console.WriteLine(parentBone);
-                    Console.WriteLine(targetBone);
+                    Console.WriteLine("Current pos: " + MabStream.Position.ToString("X"));
+                    Console.WriteLine("signature: " + signature.ToString("X"));
+                    Console.WriteLine("Zero: " + zero);
+                    Console.WriteLine(childBone.ToString("X"));
+                    Console.WriteLine(parentBone.ToString("X"));
+                    Console.WriteLine(targetBone.ToString("X"));
                     Console.WriteLine("anchorType: " + anchorType);
                     Console.WriteLine("blank: " + blank);
+                    if (blank != 3)
+                    {
+                        Console.WriteLine("FATAL ERROR: Should be 3!");
+                    }
                     Console.WriteLine(nameStart);
                     if (anchor < numAnchors)
                     {
-                        Console.WriteLine(subsectionEnd);
+                        Console.WriteLine("Subsection end: " + subsectionEnd.ToString("X"));
+                        Console.WriteLine("Maybe zero: " + maybeZero.ToString("X"));
                     }
+
                     Console.WriteLine("Subsection end above");
-                    if (i == 1)
+                    output.WriteValueU32(0);
+                    output.WriteValueU32(signature);
+                    output.WriteValueU32(childBone);
+                    output.WriteValueU32(parentBone);
+                    output.WriteValueU32(targetBone);
+                    output.WriteValueU8(anchorType);
+                    output.WriteValueU8(blank);
+                    ushort offsetOut = (ushort)(4 * (numAnchors - anchor + 1));
+                    output.WriteValueU16((ushort)(nameStart - offsetOut));
+                    if (anchor < numAnchors)
                     {
-                        output.WriteValueU32(0);
-                        output.WriteValueU32(signature);
-                        output.WriteValueU32(childBone);
-                        output.WriteValueU32(parentBone);
-                        output.WriteValueU32(targetBone);
-                        output.WriteValueU8(anchorType);
-                        output.WriteValueU8(blank);
-                        ushort offset = (ushort)(4 * (numAnchors - anchor + 1));
-                        output.WriteValueU16((ushort)(nameStart - offset));
-                        if (anchor < numAnchors)
-                        {
-                            // No additional padding or subsection end for last anchor, immediate start of string instead
-                            output.WriteValueU32((uint)(subsectionEnd - 4 * (numAnchors - anchor)));
-                        }
-                        File.WriteAllBytes("tmp" + anchor + "old.mab", output.ToArray());
+                        // No additional padding or subsection end for last anchor, immediate start of string instead
+                        output.WriteValueU32((uint)(subsectionEnd - 4 * (numAnchors - anchor)));
                     }
+                    File.WriteAllBytes("tmp" + anchor + "old.mab", output.ToArray());
                     if (!bones.Contains(childBone))
                     {
                         bones.Add(childBone);
                     }
                     anchor++;
                 }
-                Console.WriteLine("Number of anchors found: " + numAnchors);
             }
             int[] poses = { };
             if (pos9 != 0)
